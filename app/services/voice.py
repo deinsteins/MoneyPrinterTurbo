@@ -1327,6 +1327,38 @@ def create_edge_tts_communicate(
     if "boundary" in communicate_signature.parameters:
         communicate_kwargs["boundary"] = "WordBoundary"
 
+    # Deployment patch (deinsteins): edge_tts pins certifi's CA bundle
+    # (edge_tts.communicate._SSL_CTX), which lacks this sandbox's
+    # TLS-intercepting egress CA. That CA is provided via SSL_CERT_FILE,
+    # so rebuild edge_tts' module-level context from it when available.
+    try:
+        import ssl as _ssl
+
+        import edge_tts.communicate as _edge_communicate
+
+        _cafile = os.environ.get("SSL_CERT_FILE")
+        if _cafile and os.path.exists(_cafile):
+            _edge_communicate._SSL_CTX = _ssl.create_default_context(
+                cafile=_cafile
+            )
+    except Exception:
+        pass
+
+    if "proxy" in communicate_signature.parameters:
+        # Deployment patch (deinsteins): this server reaches the internet
+        # only through an authenticated egress proxy (config.toml
+        # [proxy], the same dict used for material downloads). Without
+        # it, the Edge TTS websocket connects directly and fails.
+        _proxy_cfg = config.proxy or {}
+        _proxy_url = (
+            os.environ.get("https_proxy")
+            or os.environ.get("http_proxy")
+            or _proxy_cfg.get("https")
+            or _proxy_cfg.get("http")
+        )
+        if _proxy_url:
+            communicate_kwargs["proxy"] = _proxy_url
+
     return edge_tts.Communicate(text, voice_name, **communicate_kwargs)
 
 
