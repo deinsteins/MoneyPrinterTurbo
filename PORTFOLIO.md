@@ -22,21 +22,31 @@ done on my own server in October 2026.
    The gateway key lives only in the local `config.toml`, which is
    git-ignored and **not** committed here.
 
-3. **Sandbox proxy fix.** The runtime exports a `no_proxy` list
-   containing bracketed IPv6 entries (`[::1]`) that crash the Python
-   HTTP stack's proxy parsing (`Invalid port: ':1]'`). The service
-   unit sets a sanitised `NO_PROXY=localhost,127.0.0.1`, after which
-   LLM calls succeed through the egress proxy.
+3. **Sandbox proxy fixes.**
+   - The runtime exports a `no_proxy` list containing bracketed IPv6
+     entries (`[::1]`) that crash the Python HTTP stack's proxy
+     parsing (`Invalid port: ':1]'`). The service unit sets a
+     sanitised `NO_PROXY=localhost,127.0.0.1`.
+   - `app/services/voice.py` (committed in this fork):
+     `create_edge_tts_communicate` now forwards the configured egress
+     proxy to `edge_tts.Communicate` and rebuilds edge_tts'
+     certifi-pinned SSL context from `SSL_CERT_FILE`, because the
+     sandbox proxy demands preemptive auth and MITM-intercepts TLS.
+
+4. **Footage source switched to Pixabay.** Pexels had paused new API
+   key issuance, so `video_source = "pixabay"` with a Pixabay key
+   (local config only).
+
+5. **Narration via ElevenLabs.** The built-in Edge TTS websocket
+   cannot traverse this sandbox's TLS-intercepting proxy (the proxy
+   mangles the websocket upgrade), so narration uses ElevenLabs
+   (`eleven_multilingual_v2`) with a personal Voice Design voice —
+   free-plan API access blocks library voices but allows self-created
+   ones.
 
 ## Verified behaviour
 
-Script generation verified live through the WebUI's own service layer:
-given the Indonesian topic "manfaat RAG untuk AI" it produced a
-complete, coherent Indonesian video script via the gateway.
-
-## Remaining step
-
-Full video rendering needs a free [Pexels](https://www.pexels.com/api/)
-API key for stock footage (`pexels_api_keys` in the local config).
-Everything else in the pipeline — script, terms, voice, subtitles,
-composition — is configured and ready.
+Full pipeline verified live, end to end: topic "manfaat RAG untuk AI"
+→ Indonesian script via the gateway → search terms → 5 Pixabay clips
+downloaded → ElevenLabs narration → subtitles → final render
+**1080×1920 (9:16), 23.7 seconds, H.264 + AAC**.
